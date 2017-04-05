@@ -17,6 +17,9 @@ TTF_Font* mainFont;
 TTF_Font* headerFont;
 
 bool gRunning;
+bool executing;
+bool animating;
+
 std::string inputText = "Some Text";
 
 const int maxLines = 25;
@@ -30,11 +33,29 @@ struct block{
 	int target;
 };
 
+enum Operator{SWAP};
+
+struct Instruction{
+	Operator op;
+	int index1;
+	int index2;
+};
+
+enum ErrorCode{EC_SUCCESS, EC_BAD_OPCODE, EC_OUT_OF_BOUNDS, EC_TOO_LONG, EC_TOO_SHORT};
+
+struct ParseResult{
+	ErrorCode errorCode;
+	int lineNo;
+};
+
+std::vector<Instruction> instructionStack;
+
 block userSequence[5];
 
 
 block targetSequence[5];
 
+enum ButtonType{RUN, CLEAR};
 
 class GUIObject{
 public:
@@ -66,6 +87,7 @@ class Container : public GUIObject{
 public:
 	Container(int x, int y, int w, int h, SDL_Color color) :GUIObject(x, y, w, h, color){
 		contentsSize = 0;
+		hidden = false;
 	}
 	~Container(){}
 
@@ -80,12 +102,47 @@ public:
 		return contents.at(index);
 	}
 
+	void setHidden(bool hidden){this->hidden = hidden;}
+	bool isHidden(){return hidden;}
+
 private:
 	std::vector<Container*> contents;
 	int contentsSize;
+	bool hidden;
+};
+
+class Button : public GUIObject{
+public:
+	Button(int x, int y, int w, int h, SDL_Color color, bool shown, ButtonType buttonType)
+		: GUIObject(x, y, w, h, color){
+			this->buttonType = buttonType;
+			this->shown = shown;
+	}
+
+	ButtonType getButtonType(){return buttonType;}
+	bool isShown(){return shown;}
+	void setShown(bool shown){this->shown = shown;}
+
+	bool clickedWithin(int mouseX, int mouseY){
+		if(mouseX >= x && mouseX < x + w){
+			if(mouseY >= y && mouseY < y + h){
+				std::cout << "Button Clicked!" << std::endl;
+				return true;
+			}
+			return false;
+		}
+		return false;
+	}
+
+private:
+	ButtonType buttonType;
+	bool shown;
 };
 
 
+void swapBlocks(int block1, int block2);
+
+std::vector<Button*> buttonList;
 
 bool initSDL(){
 	SDL_Init(SDL_INIT_EVERYTHING);
@@ -147,6 +204,145 @@ void initSequences(){
 	}
 }
 
+void initButtons(){
+	SDL_Color c = {255, 255, 255, 1};
+	Button* runButton = new Button(screenW - 280, screenH - 80, 120, 60, c, true, RUN);
+	buttonList.push_back(runButton);
+
+	Button* clearButton = new Button(screenW - 400 - 80, screenH - 80, 120, 60, c, true, CLEAR);
+	buttonList.push_back(clearButton);
+}
+
+void clearAllText(){
+	for(int i = 0 ; i < maxLines; i++){
+		inputBlock[i] = "";
+		currentLine = 0;
+	}
+}
+
+/*
+void parseInstructions(){
+	// read the text block from back to front forming "instructions" and inserting them into the instruction list
+	for(int i = maxLines - 1; i > -1; i--){
+		int lineLength = inputBlock[i].size();
+		const char* line = inputBlock[i].c_str();
+		//std::cout << line << std::endl;
+
+		char a;
+		char* word;
+		int iter = 0;
+		a = line[iter];
+		while(a != ' ' && iter < lineLength){
+			//a = line[iter];
+			word += a;
+			iter ++;
+			a = line[iter];
+		}
+		std::cout << word << std::endl;
+	}
+}
+*/
+
+/*
+void parseInstructions(){
+	for(int i = maxLines - 1; i > -1; i--){
+		int lineLength = inputBlock[i].size();
+
+		if(lineLength > 0){
+			const char* line = inputBlock[i].c_str();
+
+			char* a = line[0];
+			char* word = "";
+			int iter = 0;
+			//std::cout << a << std::endl;
+			
+			while(a != ' ' && iter < lineLength){
+				word += *a;
+				iter += 1;
+				a = line[iter];
+			}
+			std::cout << word << std::endl;
+		}
+	}
+}
+*/
+
+ParseResult parseInstructions(){
+
+	ParseResult pr;
+
+	for(int i = maxLines - 1; i > -1; i--){
+		std::string str = inputBlock[i];
+		std::string buf;
+		std::stringstream ss(str);
+
+		std::vector<std::string> tokens;
+
+		while(ss >> buf){
+			tokens.push_back(buf);
+		}
+
+		if(tokens.size() > 0){
+
+
+
+			Instruction newInstruction;
+		/*
+		for(int i = 0; i < tokens.size(); i++){
+			std::cout << tokens.at(i) << std::endl;
+		}
+		*/
+			if(tokens.size() > 3){
+				//std::cout << "ERROR AT LINE " << i << std::endl;	
+				pr = {EC_TOO_LONG, i};
+				instructionStack.clear();
+				return pr;
+			}
+			else if(tokens.size() < 3){
+				pr = {EC_TOO_SHORT, i};
+				instructionStack.clear();
+				return pr;
+			}
+			else if(tokens.at(0) != "SWAP"){
+				pr = {EC_BAD_OPCODE, i};
+				instructionStack.clear();
+				return pr;
+			}
+			else if(std::stoi(tokens.at(1)) < 0 || std::stoi(tokens.at(1)) > 4){
+				pr = {EC_OUT_OF_BOUNDS, i};
+				instructionStack.clear();
+				return pr;
+			}
+			else if(std::stoi(tokens.at(2)) < 0 || std::stoi(tokens.at(2)) > 4){
+				pr = {EC_OUT_OF_BOUNDS, i};
+				instructionStack.clear();
+				return pr;
+			}
+			else{
+				newInstruction.op = SWAP;
+				newInstruction.index1 = std::stoi(tokens.at(1));
+				newInstruction.index2 = std::stoi(tokens.at(2));
+				instructionStack.push_back(newInstruction);
+			}
+			std::cout << "managed to parse instructions" << std::endl;
+		}
+	}
+	pr = {EC_SUCCESS, 0};
+	return pr;
+}
+
+void executeInstructions(){
+	if(instructionStack.size() > 0){
+		Instruction currentInstruction = instructionStack.at(instructionStack.size() - 1);
+		instructionStack.pop_back();
+		if(currentInstruction.op == SWAP){
+			swapBlocks(currentInstruction.index1, currentInstruction.index2);
+		} 
+	}else{
+		executing = false;
+	}
+}
+
 void renderContainers(Container* rootContainer){
 	SDL_Rect outerRect = {rootContainer->getX(), rootContainer->getY(), rootContainer->getW(), rootContainer->getH()};
 	//SDL_SetRenderDrawColor(rend, rootContainer->getColor().r, rootContainer->getColor().g, rootContainer->getColor().b, rootContainer->getColor().a);
@@ -156,6 +352,11 @@ void renderContainers(Container* rootContainer){
 	SDL_Rect innerRect = {outerRect.x + 1, outerRect.y + 1, outerRect.w - 2, outerRect.h - 2};
 	SDL_SetRenderDrawColor(rend, 50, 50, 50, 1);
 	SDL_RenderFillRect(rend, &innerRect);
+
+	if(rootContainer->isHidden()){
+		SDL_SetRenderDrawColor(rend, 0, 0, 0, 0.5);
+		SDL_RenderFillRect(rend, &outerRect);
+	}
 
 	for(int i = 0; i < rootContainer->getContentsSize(); i++){
 		renderContainers(rootContainer->getContents(i));
@@ -234,6 +435,16 @@ void renderBlocks(){
 	}
 }
 
+void renderButtons(){
+	for(int i = 0; i < buttonList.size(); i++){
+		if(buttonList.at(i)->isShown()){
+			SDL_Rect dRect = {buttonList.at(i)->getX(), buttonList.at(i)->getY(), buttonList.at(i)->getW(), buttonList.at(i)->getH()};
+			SDL_SetRenderDrawColor(rend, 255, 255, 255, 1);
+			SDL_RenderFillRect(rend, &dRect);	
+		}
+	}
+}
+
 void renderAll(Container* rootContainer){
 	SDL_RenderClear(rend);
 	renderContainers(rootContainer);
@@ -241,14 +452,15 @@ void renderAll(Container* rootContainer){
 	renderTextBlock();
 	renderHeaders();
 	renderBlocks();
+	renderButtons();
 	SDL_RenderPresent(rend);
 }
 
 void swapBlocks(int block1, int block2){
-	
 	std::swap(userSequence[block1], userSequence[block2]);
 	userSequence[block1].target = (block1 * 112) + 48;
 	userSequence[block2].target = (block2 * 112) + 48;
+	animating = true;
 	std::cout << "swapping " << block1 << " & " << block2 << std::endl;
 }
 
@@ -265,13 +477,37 @@ void animateBlocks(){
 			}
 			else if(userSequence[i].target == userSequence[i].screenX){
 				userSequence[i].target = 0;
+				animating = false;
 			}
 		}
 	}
 }
 
+void runButtonBehaviour(ButtonType t){
+	if (t == RUN){
+		std::cout << "RUN button clicked!" << std::endl;
+		//executing = true;
+		ParseResult pr = parseInstructions();
+		if(pr.errorCode == EC_SUCCESS){
+			executing = true;
+		}
+	}
+	else if(t == CLEAR){
+		std::cout << "CLEAR button clicked!" << std::endl;
+		clearAllText();
+	}
+}
+
+void checkButtons(int mouseX, int mouseY){
+	for(int i = 0; i < buttonList.size(); i++){
+		if(buttonList.at(i)->clickedWithin(mouseX, mouseY)){
+			runButtonBehaviour(buttonList.at(i)->getButtonType());
+		}
+	}
+}
+
 void handleInputs(){
-	while(SDL_PollEvent(&evt) != 0){
+	while(SDL_PollEvent(&evt) != 0 && !executing){
 		if(evt.type == SDL_QUIT){
 			gRunning = false;
 		}
@@ -284,7 +520,6 @@ void handleInputs(){
 			}
 			else if(evt.key.keysym.sym == SDLK_RETURN && currentLine < maxLines - 1){
 				currentLine += 1;
-				swapBlocks(3, 1);
 			}
 
 			else if(evt.key.keysym.sym == SDLK_UP && currentLine > 0){
@@ -302,6 +537,12 @@ void handleInputs(){
 		else if(evt.type == SDL_TEXTINPUT){
 			inputBlock[currentLine] += evt.text.text;
 		}
+
+		else if(evt.type == SDL_MOUSEBUTTONDOWN){
+			int x, y;
+			SDL_GetMouseState(&x, &y);
+			checkButtons(x, y);
+		}
 	}
 }
 
@@ -312,8 +553,12 @@ int main(int argv, char* argc[]){
 
 	
 	if(initSDL()) gRunning = true;
+	executing = false;
+	animating = false;
 
 	initSequences();
+
+	initButtons();
 
 	Container* rootContainer = new Container(0, 0, screenW, screenH, {255, 0, 255, 1});
 
@@ -339,6 +584,9 @@ int main(int argv, char* argc[]){
 
 	while(gRunning){
 		handleInputs();
+		if(executing && !animating){
+			executeInstructions();
+		}
 		animateBlocks();
 		renderAll(rootContainer);
 	}
