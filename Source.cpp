@@ -26,11 +26,17 @@ const int maxLines = 25;
 std::string inputBlock[maxLines];
 int currentLine = 0;
 
+
+void swapBlocks(int block1, int block2);
+void renderText(const char* text, TTF_Font* font, int x, int y, int r, int g, int b);
+
+
 struct block{
 	int r, g, b;
 	int sortValue;
 	int screenX, screenY;
 	int target;
+	bool movingUp;
 };
 
 enum Operator{SWAP};
@@ -55,7 +61,7 @@ block userSequence[5];
 
 block targetSequence[5];
 
-enum ButtonType{RUN, CLEAR};
+enum ButtonType{RUN, CLEAR, ERROR_OK, NEXT_LEVEL};
 
 class GUIObject{
 public:
@@ -139,8 +145,62 @@ private:
 	bool shown;
 };
 
+class FloatingWindow : public GUIObject{
+public:
+	FloatingWindow(const char* header, const char* subTitle, ButtonType buttonType, int width = 300, int height = 200)
+		: GUIObject((screenW / 2)- (width / 2), (screenH / 2) - (height / 2) , width, height, {255, 255, 255}){
+			this->shown = false;
+			this->header = header;
+			this->subTitle = subTitle;
+			this->button = new Button(this->x + 100, this->y + 150, 100, 40, {255, 255, 255}, true, buttonType );
+	}
 
-void swapBlocks(int block1, int block2);
+	~FloatingWindow(){}
+
+	bool isShown(){ return shown;}
+	void setShown(bool shown){this->shown = shown;}
+	const char* getHeader(){return header;}
+	void setHeader(const char* header){this->header = header;}
+	const char* getSubtitle(){return subTitle;}
+	void setSubTitle(const char* subTitle){this->subTitle = subTitle; std::cout << "subtitle changed" << std::endl;}
+	Button* getbutton(){ return button;}
+
+	void Render(){
+		if(shown){
+			SDL_Rect dRect = {0, 0, screenW, screenH};
+			SDL_SetRenderDrawColor(rend, 0, 0, 0, 200);
+			SDL_RenderFillRect(rend, &dRect);
+
+			dRect = {x - 2, y - 2, w + 4, h + 4};
+			SDL_SetRenderDrawColor(rend, 255, 255, 255, 255);
+			SDL_RenderFillRect(rend, &dRect);
+
+			dRect = {x, y, w, h};
+			SDL_SetRenderDrawColor(rend, 50, 50, 50, 255);
+			SDL_RenderFillRect(rend, &dRect);
+
+			dRect = {button->getX(), button->getY(), button->getW(), button->getH()};
+			SDL_SetRenderDrawColor(rend, 255, 255, 255, 255);
+			SDL_RenderFillRect(rend, &dRect);
+
+			renderText(header, headerFont, this->x + 100, this->y + 2, 255, 255, 255);
+
+			renderText(subTitle, mainFont, this->x + 20, this->y + 40, 255, 255, 255);
+			std::cout << "rendering text:" << subTitle << std::endl; 
+		}
+
+	}
+
+private:
+	bool shown;
+	const char* header;
+	const char* subTitle;
+	Button* button;
+};
+
+FloatingWindow* errorWindow;
+FloatingWindow* doneWindow;
+
 
 std::vector<Button*> buttonList;
 
@@ -156,6 +216,7 @@ bool initSDL(){
 		rend = SDL_CreateRenderer(window, 0, SDL_RENDERER_ACCELERATED);
 		if (rend != NULL){
 			printf("Renderer Initialized\n");
+			SDL_SetRenderDrawBlendMode(rend, SDL_BLENDMODE_BLEND);
 			mainFont = TTF_OpenFont("Fonts/half_bold_pixel.ttf",24);
 			headerFont = TTF_OpenFont("Fonts/half_bold_pixel.ttf", 32);
 			SDL_StartTextInput();
@@ -172,11 +233,11 @@ bool initSDL(){
 
 void initSequences(){
 	
-	userSequence[0] = {255, 255, 0, 4, 0, 0, 0};
-	userSequence[1] = {0, 0, 255, 3, 0, 0, 0};
-	userSequence[2] = {0, 255, 0, 2, 0, 0, 0};
-	userSequence[3] = {255, 0, 0, 1, 0, 0, 0};
-	userSequence[4] = {0, 255, 255, 5, 0, 0, 0};
+	userSequence[0] = {255, 255, 0, 4, 0, 0, 0, false};
+	userSequence[1] = {0, 0, 255, 3, 0, 0, 0, false};
+	userSequence[2] = {0, 255, 0, 2, 0, 0, 0, false};
+	userSequence[3] = {255, 0, 0, 1, 0, 0, 0, false};
+	userSequence[4] = {0, 255, 255, 5, 0, 0, 0, false};
 
 	SDL_Rect tRect = {48, (screenH / 4) - 40, 80, 80};
 
@@ -186,11 +247,11 @@ void initSequences(){
 		tRect.x += 112;
 	}
 
-	targetSequence[0] = {255, 0, 0, 1, 0, 0, 0};
-	targetSequence[1] = {0, 255, 0, 2, 0, 0, 0};
-	targetSequence[2] = {0, 0, 255, 3, 0, 0, 0};
-	targetSequence[3] = {255, 255, 0, 4, 0, 0, 0};
-	targetSequence[4] = {0, 255, 255, 5, 0, 0, 0};
+	targetSequence[0] = {255, 0, 0, 1, 0, 0, 0, false};
+	targetSequence[1] = {0, 255, 0, 2, 0, 0, 0, false};
+	targetSequence[2] = {0, 0, 255, 3, 0, 0, 0, false};
+	targetSequence[3] = {255, 255, 0, 4, 0, 0, 0, false};
+	targetSequence[4] = {0, 255, 255, 5, 0, 0, 0, false};
 
 	//tRect = {48, (screenH / 4) - 40, 80, 80};
 
@@ -268,6 +329,7 @@ void parseInstructions(){
 */
 
 ParseResult parseInstructions(){
+	std::cout << "parser called" << std::endl;
 
 	ParseResult pr;
 
@@ -346,15 +408,15 @@ void executeInstructions(){
 void renderContainers(Container* rootContainer){
 	SDL_Rect outerRect = {rootContainer->getX(), rootContainer->getY(), rootContainer->getW(), rootContainer->getH()};
 	//SDL_SetRenderDrawColor(rend, rootContainer->getColor().r, rootContainer->getColor().g, rootContainer->getColor().b, rootContainer->getColor().a);
-	SDL_SetRenderDrawColor(rend, 224, 224, 224, 1);
+	SDL_SetRenderDrawColor(rend, 224, 224, 224, 255);
 	SDL_RenderFillRect(rend, &outerRect);
 
 	SDL_Rect innerRect = {outerRect.x + 1, outerRect.y + 1, outerRect.w - 2, outerRect.h - 2};
-	SDL_SetRenderDrawColor(rend, 50, 50, 50, 1);
+	SDL_SetRenderDrawColor(rend, 50, 50, 50, 255);
 	SDL_RenderFillRect(rend, &innerRect);
 
 	if(rootContainer->isHidden()){
-		SDL_SetRenderDrawColor(rend, 0, 0, 0, 0.5);
+		SDL_SetRenderDrawColor(rend, 0, 0, 0, 255);
 		SDL_RenderFillRect(rend, &outerRect);
 	}
 
@@ -378,7 +440,7 @@ void renderText(const char* text, TTF_Font* font, int x, int y, int r, int g, in
 void renderTextBlock(){
 
 	SDL_Rect lineHighlight = {(screenW / 2) + 42, (currentLine * 24) + 24, screenW, 24};
-	SDL_SetRenderDrawColor(rend, 145, 145, 145, 1);
+	SDL_SetRenderDrawColor(rend, 145, 145, 145, 255);
 	SDL_RenderFillRect(rend, &lineHighlight);
 
 	for(int i = 0; i < maxLines; i ++){
@@ -397,8 +459,8 @@ void renderLineNumbers(){
 }
 
 void renderHeaders(){
-	renderText("YOUR SEQUENCE:", headerFont, (screenW / 4) - 125, 20, 255, 255, 255);
-	renderText("TARGET SEQUENCE:", headerFont, (screenW / 4) - 150, (screenH / 2) + 20, 255, 255, 255);
+	renderText("MAKE THIS:", headerFont, (screenW / 4) - 125, 20, 255, 255, 255);
+	renderText("LOOK LIKE THIS:", headerFont, (screenW / 4) - 150, (screenH / 2) + 20, 255, 255, 255);
 }
 
 void renderBlocks(){
@@ -418,7 +480,7 @@ void renderBlocks(){
 		
 		dRect.x = userSequence[i].screenX;
 		dRect.y = userSequence[i].screenY;
-		SDL_SetRenderDrawColor(rend, userSequence[i].r, userSequence[i].g, userSequence[i].b, 1 );
+		SDL_SetRenderDrawColor(rend, userSequence[i].r, userSequence[i].g, userSequence[i].b, 255);
 		SDL_RenderFillRect(rend, &dRect);
 
 		std::string indexString = std::to_string(i);
@@ -427,7 +489,7 @@ void renderBlocks(){
 
 		dRect.x = targetSequence[i].screenX;
 		dRect.y = targetSequence[i].screenY;
-		SDL_SetRenderDrawColor(rend, targetSequence[i].r, targetSequence[i].g, targetSequence[i].b, 1 );
+		SDL_SetRenderDrawColor(rend, targetSequence[i].r, targetSequence[i].g, targetSequence[i].b, 255 );
 		SDL_RenderFillRect(rend, &dRect);
 
 		//std::string indexString = std::to_string(i);
@@ -439,21 +501,19 @@ void renderButtons(){
 	for(int i = 0; i < buttonList.size(); i++){
 		if(buttonList.at(i)->isShown()){
 			SDL_Rect dRect = {buttonList.at(i)->getX(), buttonList.at(i)->getY(), buttonList.at(i)->getW(), buttonList.at(i)->getH()};
-			SDL_SetRenderDrawColor(rend, 255, 255, 255, 1);
+			SDL_SetRenderDrawColor(rend, 255, 255, 255, 255);
 			SDL_RenderFillRect(rend, &dRect);	
 		}
 	}
 }
 
 void renderAll(Container* rootContainer){
-	SDL_RenderClear(rend);
 	renderContainers(rootContainer);
 	renderLineNumbers();
 	renderTextBlock();
 	renderHeaders();
 	renderBlocks();
 	renderButtons();
-	SDL_RenderPresent(rend);
 }
 
 void swapBlocks(int block1, int block2){
@@ -479,6 +539,14 @@ void animateBlocks(){
 				userSequence[i].target = 0;
 				animating = false;
 			}
+
+			if(userSequence[i].screenY > 50){
+				//userSequence[i].screenY -= 1;
+				userSequence[i].movingUp = true;
+			}else userSequence[i].movingUp = false;
+			
+			//if(userSequence[i].movingUp == true) userSequence[i].screenY -= 1;
+			//else if(userSequence[i].movingUp == false) userSequence[i].screenY += 1;
 		}
 	}
 }
@@ -488,8 +556,45 @@ void runButtonBehaviour(ButtonType t){
 		std::cout << "RUN button clicked!" << std::endl;
 		//executing = true;
 		ParseResult pr = parseInstructions();
-		if(pr.errorCode == EC_SUCCESS){
-			executing = true;
+		std::string errorMsg;
+		switch(pr.errorCode){
+			case EC_SUCCESS:
+				executing = true;
+			break;
+			case EC_BAD_OPCODE:
+				std::cout << "EC_BAD_OPCODE" << std::endl;
+				errorMsg = "What is this instruction?\n";
+				errorMsg.append("Line: ").append(std::to_string(pr.lineNo));
+				errorWindow->setSubTitle(errorMsg.c_str());
+				errorWindow->setShown(true);
+				currentLine = pr.lineNo;
+			break;
+			case EC_TOO_SHORT:
+				std::cout << "EC_TOO_SHORT" << std::endl;
+				errorMsg = "Instruction too short!\n";
+				errorMsg.append("Line: ").append(std::to_string(pr.lineNo));
+				errorWindow->setSubTitle(errorMsg.c_str());
+				errorWindow->setShown(true);
+				currentLine = pr.lineNo;
+			break;
+			case EC_TOO_LONG:
+				std::cout << "EC_TOO_LONG" << std::endl;
+				errorMsg = "Instruction too long!\n";
+				errorMsg.append("Line: ").append(std::to_string(pr.lineNo));
+				errorWindow->setSubTitle(errorMsg.c_str());
+				errorWindow->setShown(true);
+				currentLine = pr.lineNo;
+			break;
+			case EC_OUT_OF_BOUNDS:
+				std::cout << "EC_OUT_OF_BOUNDS" << std::endl;
+				errorMsg = "Index out of bounds!\n";
+				errorMsg.append("Line: ").append(std::to_string(pr.lineNo));
+				errorWindow->setSubTitle(errorMsg.c_str());
+				errorWindow->setShown(true);
+				currentLine = pr.lineNo;
+			break;
+			default:
+			break;
 		}
 	}
 	else if(t == CLEAR){
@@ -506,7 +611,15 @@ void checkButtons(int mouseX, int mouseY){
 	}
 }
 
-void handleInputs(){
+void checkFloatingWindowButtons(int mouseX, int mouseY){
+	if(errorWindow->isShown()){
+		if(errorWindow->getbutton()->clickedWithin(mouseX, mouseY)){
+			errorWindow->setShown(false);
+		}
+	}
+}
+
+void handleInputsGame(){
 	while(SDL_PollEvent(&evt) != 0 && !executing){
 		if(evt.type == SDL_QUIT){
 			gRunning = false;
@@ -539,14 +652,43 @@ void handleInputs(){
 		}
 
 		else if(evt.type == SDL_MOUSEBUTTONDOWN){
+			std::cout << "MOUSEMOVE" << std::endl;
 			int x, y;
 			SDL_GetMouseState(&x, &y);
 			checkButtons(x, y);
+			checkFloatingWindowButtons(x, y);
+		}
+	}
+}
+
+void handleInputsGeneric(){
+	while(SDL_PollEvent(&evt)){
+		if(evt.type == SDL_QUIT){
+			gRunning = false;
 		}
 	}
 }
 
 
+
+void handleInputsFloatingWindows(){
+	while(SDL_PollEvent(&evt)){
+		if(evt.type == SDL_MOUSEBUTTONDOWN){
+			int x,y;
+			SDL_GetMouseState(&x, &y);
+
+			if(doneWindow->isShown()){
+				// newLevel
+			}
+			if(errorWindow->isShown()){
+				if(errorWindow->getbutton()->clickedWithin(x, y)){
+					std::cout << "Clicked error window button" << std::endl;
+					errorWindow->setShown(false);
+				}
+			}
+		}
+	}
+}
 
 int main(int argv, char* argc[]){
 
@@ -576,6 +718,10 @@ int main(int argv, char* argc[]){
 
 	Container* leftBottomContainer = new Container(0, screenH/2, screenW / 2, screenH/ 2, {255, 255, 255, 1});
 
+	errorWindow = new FloatingWindow("ERROR", "TEST STRING2", ERROR_OK);
+	doneWindow = new FloatingWindow("DONE", "You completed the level!", NEXT_LEVEL);
+
+	//errorWindow->setShown(true);
 	
 	rootContainer->addContents(leftTopContainer);
 	rootContainer->addContents(leftBottomContainer);
@@ -583,12 +729,19 @@ int main(int argv, char* argc[]){
 
 
 	while(gRunning){
-		handleInputs();
+		//if(!errorWindow->isShown() || !doneWindow->isShown())handleInputsGame();
+		//handleInputsGeneric();
+		handleInputsGame();
 		if(executing && !animating){
 			executeInstructions();
 		}
 		animateBlocks();
+		//std::cout << pr.errorCode << std::endl;
+		SDL_RenderClear(rend);
 		renderAll(rootContainer);
+		errorWindow->Render();
+		doneWindow->Render();
+		SDL_RenderPresent(rend);
 	}
 
 	SDL_Quit();
