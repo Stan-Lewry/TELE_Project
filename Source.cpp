@@ -163,7 +163,7 @@ public:
 	void setHeader(const char* header){this->header = header;}
 	const char* getSubtitle(){return subTitle;}
 	void setSubTitle(const char* subTitle){this->subTitle = subTitle; std::cout << "subtitle changed" << std::endl;}
-	Button* getbutton(){ return button;}
+	Button* getButton(){ return button;}
 
 	void Render(){
 		if(shown){
@@ -185,7 +185,7 @@ public:
 
 			renderText(header, headerFont, this->x + 100, this->y + 2, 255, 255, 255);
 
-			renderText(subTitle, mainFont, this->x + 20, this->y + 40, 255, 255, 255);
+			renderText(subTitle, mainFont, this->x + 20, this->y + 60, 255, 255, 255);
 			std::cout << "rendering text:" << subTitle << std::endl; 
 		}
 
@@ -233,11 +233,21 @@ bool initSDL(){
 
 void initSequences(){
 	
+	/*
 	userSequence[0] = {255, 255, 0, 4, 0, 0, 0, false};
 	userSequence[1] = {0, 0, 255, 3, 0, 0, 0, false};
 	userSequence[2] = {0, 255, 0, 2, 0, 0, 0, false};
 	userSequence[3] = {255, 0, 0, 1, 0, 0, 0, false};
 	userSequence[4] = {0, 255, 255, 5, 0, 0, 0, false};
+	*/
+
+	userSequence[0] = {255, 0, 0, 1, 0, 0, 0, false};
+	userSequence[1] = {0, 255, 0, 2, 0, 0, 0, false};
+	userSequence[2] = {0, 0, 255, 3, 0, 0, 0, false};
+	userSequence[3] = {255, 255, 0, 4, 0, 0, 0, false};
+	userSequence[4] = {0, 255, 255, 5, 0, 0, 0, false};
+	std::random_shuffle(std::begin(userSequence), std::end(userSequence));
+	
 
 	SDL_Rect tRect = {48, (screenH / 4) - 40, 80, 80};
 
@@ -263,6 +273,8 @@ void initSequences(){
 		targetSequence[i].screenY = tRect.y;
 		tRect.x += 112;
 	}
+
+
 }
 
 void initButtons(){
@@ -327,6 +339,15 @@ void parseInstructions(){
 	}
 }
 */
+
+bool compareSequences(){
+	for(int i = 0; i < 5; i++){
+		if(userSequence[i].sortValue != targetSequence[i].sortValue){
+			return false;
+		}
+	}
+	return true;
+}
 
 ParseResult parseInstructions(){
 	std::cout << "parser called" << std::endl;
@@ -401,9 +422,16 @@ void executeInstructions(){
 			swapBlocks(currentInstruction.index1, currentInstruction.index2);
 		} 
 	}else{
+		if(compareSequences()){
+			doneWindow->setShown(true);
+		}else{
+			errorWindow->setShown(true);
+		}
 		executing = false;
 	}
 }
+
+
 
 void renderContainers(Container* rootContainer){
 	SDL_Rect outerRect = {rootContainer->getX(), rootContainer->getY(), rootContainer->getW(), rootContainer->getH()};
@@ -557,10 +585,20 @@ void runButtonBehaviour(ButtonType t){
 		//executing = true;
 		ParseResult pr = parseInstructions();
 		std::string errorMsg;
+
+		if(pr.errorCode != EC_SUCCESS){
+			errorWindow->setShown(true);
+			currentLine = pr.lineNo;
+		}
+		else{
+			executing = true;
+		}
+		/*
 		switch(pr.errorCode){
 			case EC_SUCCESS:
 				executing = true;
 			break;
+			
 			case EC_BAD_OPCODE:
 				std::cout << "EC_BAD_OPCODE" << std::endl;
 				errorMsg = "What is this instruction?\n";
@@ -593,9 +631,11 @@ void runButtonBehaviour(ButtonType t){
 				errorWindow->setShown(true);
 				currentLine = pr.lineNo;
 			break;
+	
 			default:
 			break;
 		}
+		*/
 	}
 	else if(t == CLEAR){
 		std::cout << "CLEAR button clicked!" << std::endl;
@@ -612,9 +652,18 @@ void checkButtons(int mouseX, int mouseY){
 }
 
 void checkFloatingWindowButtons(int mouseX, int mouseY){
+	std::cout << "checking the floating window buttons" << std::endl;
 	if(errorWindow->isShown()){
-		if(errorWindow->getbutton()->clickedWithin(mouseX, mouseY)){
+		if(errorWindow->getButton()->clickedWithin(mouseX, mouseY)){
 			errorWindow->setShown(false);
+		}
+	}
+	if(doneWindow->isShown()){	
+		std::cout << "done window found to be showing" << std::endl;
+		if(doneWindow->getButton()->clickedWithin(mouseX, mouseY)){
+			doneWindow->setShown(false);
+			initSequences();
+			clearAllText();
 		}
 	}
 }
@@ -681,7 +730,7 @@ void handleInputsFloatingWindows(){
 				// newLevel
 			}
 			if(errorWindow->isShown()){
-				if(errorWindow->getbutton()->clickedWithin(x, y)){
+				if(errorWindow->getButton()->clickedWithin(x, y)){
 					std::cout << "Clicked error window button" << std::endl;
 					errorWindow->setShown(false);
 				}
@@ -718,8 +767,8 @@ int main(int argv, char* argc[]){
 
 	Container* leftBottomContainer = new Container(0, screenH/2, screenW / 2, screenH/ 2, {255, 255, 255, 1});
 
-	errorWindow = new FloatingWindow("ERROR", "TEST STRING2", ERROR_OK);
-	doneWindow = new FloatingWindow("DONE", "You completed the level!", NEXT_LEVEL);
+	errorWindow = new FloatingWindow("ERROR", "Mistake found!", ERROR_OK);
+	doneWindow = new FloatingWindow("DONE", "Level complete!", NEXT_LEVEL);
 
 	//errorWindow->setShown(true);
 	
