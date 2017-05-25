@@ -16,9 +16,18 @@ SDL_Event evt;
 TTF_Font* mainFont;
 TTF_Font* headerFont;
 
+SDL_Texture* blocks01;
+SDL_Texture* blocks02;
+SDL_Texture* blocks03;
+SDL_Texture* clearTexture;
+SDL_Texture* goTexture;
+SDL_Texture* okTexture; 
+
 bool gRunning;
 bool executing;
 bool animating;
+int levelNo = 0;
+
 
 std::string inputText = "Some Text";
 
@@ -180,8 +189,9 @@ public:
 			SDL_RenderFillRect(rend, &dRect);
 
 			dRect = {button->getX(), button->getY(), button->getW(), button->getH()};
-			SDL_SetRenderDrawColor(rend, 255, 255, 255, 255);
-			SDL_RenderFillRect(rend, &dRect);
+			//SDL_SetRenderDrawColor(rend, 255, 255, 255, 255);
+			//SDL_RenderFillRect(rend, &dRect);
+			SDL_RenderCopy(rend, okTexture, NULL, &dRect);
 
 			renderText(header, headerFont, this->x + 100, this->y + 2, 255, 255, 255);
 
@@ -231,6 +241,12 @@ bool initSDL(){
 	}
 }
 
+SDL_Texture* loadPNG(char* path){
+	SDL_Surface* tempSurf = IMG_Load(path);
+	SDL_Texture* t = SDL_CreateTextureFromSurface(rend, tempSurf);
+	return t;
+}
+
 void initSequences(){
 	
 	/*
@@ -241,11 +257,11 @@ void initSequences(){
 	userSequence[4] = {0, 255, 255, 5, 0, 0, 0, false};
 	*/
 
-	userSequence[0] = {255, 0, 0, 1, 0, 0, 0, false};
-	userSequence[1] = {0, 255, 0, 2, 0, 0, 0, false};
-	userSequence[2] = {0, 0, 255, 3, 0, 0, 0, false};
-	userSequence[3] = {255, 255, 0, 4, 0, 0, 0, false};
-	userSequence[4] = {0, 255, 255, 5, 0, 0, 0, false};
+	userSequence[0] = {255, 0, 0, 0, 0, 0, 0, false};
+	userSequence[1] = {0, 255, 0, 1, 0, 0, 0, false};
+	userSequence[2] = {0, 0, 255, 2, 0, 0, 0, false};
+	userSequence[3] = {255, 255, 0, 3, 0, 0, 0, false};
+	userSequence[4] = {0, 255, 255, 4, 0, 0, 0, false};
 	std::random_shuffle(std::begin(userSequence), std::end(userSequence));
 	
 
@@ -257,11 +273,11 @@ void initSequences(){
 		tRect.x += 112;
 	}
 
-	targetSequence[0] = {255, 0, 0, 1, 0, 0, 0, false};
-	targetSequence[1] = {0, 255, 0, 2, 0, 0, 0, false};
-	targetSequence[2] = {0, 0, 255, 3, 0, 0, 0, false};
-	targetSequence[3] = {255, 255, 0, 4, 0, 0, 0, false};
-	targetSequence[4] = {0, 255, 255, 5, 0, 0, 0, false};
+	targetSequence[0] = {255, 0, 0, 0, 0, 0, 0, false};
+	targetSequence[1] = {0, 255, 0, 1, 0, 0, 0, false};
+	targetSequence[2] = {0, 0, 255, 2, 0, 0, 0, false};
+	targetSequence[3] = {255, 255, 0, 3, 0, 0, 0, false};
+	targetSequence[4] = {0, 255, 255, 4, 0, 0, 0, false};
 
 	//tRect = {48, (screenH / 4) - 40, 80, 80};
 
@@ -489,6 +505,9 @@ void renderLineNumbers(){
 void renderHeaders(){
 	renderText("MAKE THIS:", headerFont, (screenW / 4) - 125, 20, 255, 255, 255);
 	renderText("LOOK LIKE THIS:", headerFont, (screenW / 4) - 150, (screenH / 2) + 20, 255, 255, 255);
+	std::string levelHeader = "Level: ";
+	levelHeader.append(std::to_string(levelNo + 1));
+	renderText(levelHeader.c_str(), headerFont, 20, 20, 255, 255, 255);
 }
 
 void renderBlocks(){
@@ -503,13 +522,20 @@ void renderBlocks(){
 	}
 	*/
 	SDL_Rect dRect = {0, 0, 80, 80};
+	SDL_Rect sRect = {0, 0, 80, 80};
+
 
 	for(int i = 0; i < 5; i++){
 		
 		dRect.x = userSequence[i].screenX;
 		dRect.y = userSequence[i].screenY;
-		SDL_SetRenderDrawColor(rend, userSequence[i].r, userSequence[i].g, userSequence[i].b, 255);
-		SDL_RenderFillRect(rend, &dRect);
+		sRect.x = userSequence[i].sortValue * 80;
+		//SDL_SetRenderDrawColor(rend, userSequence[i].r, userSequence[i].g, userSequence[i].b, 255);
+		//SDL_RenderFillRect(rend, &dRect);
+
+		if(levelNo == 0)	SDL_RenderCopy(rend, blocks01, &sRect, &dRect);
+		if(levelNo == 1)	SDL_RenderCopy(rend, blocks02, &sRect, &dRect);
+		if(levelNo == 2)	SDL_RenderCopy(rend, blocks03, &sRect, &dRect);
 
 		std::string indexString = std::to_string(i);
 		
@@ -517,8 +543,13 @@ void renderBlocks(){
 
 		dRect.x = targetSequence[i].screenX;
 		dRect.y = targetSequence[i].screenY;
-		SDL_SetRenderDrawColor(rend, targetSequence[i].r, targetSequence[i].g, targetSequence[i].b, 255 );
-		SDL_RenderFillRect(rend, &dRect);
+		sRect.x = targetSequence[i].sortValue * 80;
+		//SDL_SetRenderDrawColor(rend, targetSequence[i].r, targetSequence[i].g, targetSequence[i].b, 255 );
+		//SDL_RenderFillRect(rend, &dRect);
+		
+		if(levelNo == 0)	SDL_RenderCopy(rend, blocks01, &sRect, &dRect);
+		if(levelNo == 1)	SDL_RenderCopy(rend, blocks02, &sRect, &dRect);
+		if(levelNo == 2)	SDL_RenderCopy(rend, blocks03, &sRect, &dRect);
 
 		//std::string indexString = std::to_string(i);
 		renderText(indexString.c_str(), mainFont, (dRect.x + (dRect.w / 2)) - 12, dRect.y + 94, 255, 255, 255);
@@ -529,8 +560,10 @@ void renderButtons(){
 	for(int i = 0; i < buttonList.size(); i++){
 		if(buttonList.at(i)->isShown()){
 			SDL_Rect dRect = {buttonList.at(i)->getX(), buttonList.at(i)->getY(), buttonList.at(i)->getW(), buttonList.at(i)->getH()};
-			SDL_SetRenderDrawColor(rend, 255, 255, 255, 255);
-			SDL_RenderFillRect(rend, &dRect);	
+			//SDL_SetRenderDrawColor(rend, 255, 255, 255, 255);
+			//SDL_RenderFillRect(rend, &dRect);	
+			if(buttonList.at(i)->getButtonType() == RUN)	SDL_RenderCopy(rend, goTexture, NULL, &dRect);
+			if(buttonList.at(i)->getButtonType() == CLEAR)	SDL_RenderCopy(rend, clearTexture, NULL, &dRect);
 		}
 	}
 }
@@ -663,6 +696,7 @@ void checkFloatingWindowButtons(int mouseX, int mouseY){
 		if(doneWindow->getButton()->clickedWithin(mouseX, mouseY)){
 			doneWindow->setShown(false);
 			initSequences();
+			if(levelNo < 2) levelNo += 1;
 			clearAllText();
 		}
 	}
@@ -690,6 +724,10 @@ void handleInputsGame(){
 			else if(evt.key.keysym.sym == SDLK_DOWN && currentLine < maxLines - 1){
 				currentLine += 1;
 			}
+			else if(evt.key.keysym.sym == SDLK_TAB){
+				doneWindow->setShown(true);
+			}
+				
 			//		delete last character
 			// else if( e.key.keysym.sym == SDLK_c && SDL_GetModState() & KMOD_CTRL )
 			//		copy - optional feature
@@ -776,6 +814,12 @@ int main(int argv, char* argc[]){
 	rootContainer->addContents(leftBottomContainer);
 	rootContainer->addContents(rightContainer);
 
+	blocks01 = loadPNG("Assets/blocks01.png");
+	blocks02 = loadPNG("Assets/blocks02.png");
+	blocks03 = loadPNG("Assets/blocks03.png");
+	goTexture = loadPNG("Assets/go.png");
+	clearTexture = loadPNG("Assets/clear.png");
+	okTexture = loadPNG("Assets/ok.png");
 
 	while(gRunning){
 		//if(!errorWindow->isShown() || !doneWindow->isShown())handleInputsGame();
